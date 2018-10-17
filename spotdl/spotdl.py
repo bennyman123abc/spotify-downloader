@@ -154,14 +154,21 @@ def download_single(raw_song, number=None):
     songname = content.title
 
     if meta_tags is not None:
-        refined_songname = internals.format_string(
-            const.args.file_format, meta_tags, slugification=True
-        )
-        log.debug(
-            'Refining songname from "{0}" to "{1}"'.format(songname, refined_songname)
-        )
-        if not refined_songname == " - ":
-            songname = refined_songname
+        # refined_songname = internals.format_string(
+        #     const.args.file_format, meta_tags, slugification=True
+        # )
+        # log.debug(
+        #     'Refining songname from "{0}" to "{1}"'.format(songname, refined_songname)
+        # )
+        # if not refined_songname == " - ":
+        #     songname = refined_songname
+        if meta_tags["track_number"]:
+            if meta_tags["track_number"] < 10:
+                songname = "0{0} {1}".format(meta_tags["track_number"], meta_tags["name"])
+            else:
+                songname = "{0} {1}".format(meta_tags["track_number"], meta_tags["name"])
+        else:
+            songname = meta_tags["name"]
     else:
         log.warning("Could not find metadata")
         songname = internals.sanitize_title(songname)
@@ -171,10 +178,12 @@ def download_single(raw_song, number=None):
 
     if not check_exists(songname, raw_song, meta_tags):
         # deal with file formats containing slashes to non-existent directories
-        songpath = os.path.join(const.args.folder, os.path.dirname(songname))
+        artist = meta_tags["artist"]
+        album = meta_tags["album"]
+        songpath = os.path.join(const.args.folder, artist["name"], album["name"])
         os.makedirs(songpath, exist_ok=True)
         input_song = songname + const.args.input_ext
-        output_song = songname + const.args.output_ext
+        output_song = os.path.join(songpath, songname + const.args.output_ext)
         if youtube_tools.download_song(input_song, content):
             print("")
             try:
@@ -227,9 +236,21 @@ def main():
         elif const.args.playlist:
             spotify_tools.write_playlist(playlist_url=const.args.playlist)
         elif const.args.album:
-            spotify_tools.write_album(album_url=const.args.album)
+            if os.path.exists("temp-album.txt"):
+                os.remove("temp-album.txt")
+            spotify_tools.write_temp_album(album_url=const.args.album)
+            download_list(
+                tracks_file="temp-album.txt"
+            )
+            os.remove("temp-album.txt")
         elif const.args.all_albums:
+            if os.path.exists("temp-artist.txt"):
+                os.remove("temp-artist.txt")
             spotify_tools.write_all_albums_from_artist(artist_url=const.args.all_albums)
+            download_list(
+                tracks_file="temp-artist.txt"
+            )
+            os.remove("temp-artist.txt")
         elif const.args.username:
             spotify_tools.write_user_playlist(username=const.args.username)
 

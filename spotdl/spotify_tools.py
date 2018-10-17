@@ -42,6 +42,9 @@ def generate_metadata(raw_song):
     artist = spotify.artist(meta_tags["artists"][0]["id"])
     album = spotify.album(meta_tags["album"]["id"])
 
+    meta_tags["artist"] = artist
+    meta_tags["album"] = album
+
     try:
         meta_tags[u"genre"] = titlecase(artist["genres"][0])
     except IndexError:
@@ -173,7 +176,7 @@ def fetch_album_from_artist(artist_url, album_type='album'):
     return albums
         
 
-def write_all_albums_from_artist(artist_url, text_file=None):
+def write_all_albums_from_artist(artist_url):
     """
     This function gets all albums from an artist and writes it to a file in the
     current working directory called [ARTIST].txt, where [ARTIST] is the artist
@@ -189,26 +192,32 @@ def write_all_albums_from_artist(artist_url, text_file=None):
 
     #if no file if given, the default save file is in the current working
     #directory with the name of the artist
-    if text_file is None:
-        text_file = albums[0]['artists'][0]['name']+'.txt'
+    text_file = 'temp-artist.txt'
 
     for album in albums:
        #logging album name 
-       log.info('Fetching album: ' + album['name'])
-       write_album(album_base_url + album['id'], text_file=text_file)
+        if album["total_tracks"] > 2: # skip singles
+            log.info('Fetching album: ' + album['name'])
+            write_album(album_base_url + album['id'], text_file=text_file)
 
     #fetching all single albums
-    singles = fetch_album_from_artist(artist_url, album_type='single') 
+    # singles = fetch_album_from_artist(artist_url, album_type='single') 
 
-    for single in singles:
-        log.info('Fetching single: ' + single['name'])
-        write_album(album_base_url + single['id'], text_file=text_file)
+    # for single in singles:
+    #     log.info('Fetching single: ' + single['name'])
+    #     write_album(album_base_url + single['id'], text_file=text_file)
 
 def write_album(album_url, text_file=None):
     album = fetch_album(album_url)
     tracks = spotify.album_tracks(album["id"])
     if not text_file:
         text_file = u"{0}.txt".format(slugify(album["name"], ok="-_()[]{}"))
+    return write_tracks(tracks, text_file)
+
+def write_temp_album(album_url):
+    album = fetch_album(album_url)
+    tracks = spotify.album_tracks(album["id"])
+    text_file = u"temp-album.txt"
     return write_tracks(tracks, text_file)
 
 
@@ -239,4 +248,32 @@ def write_tracks(tracks, text_file):
                 tracks = spotify.next(tracks)
             else:
                 break
+    return track_urls
+
+def fetch_tracks(tracks):
+    log.info("Fetching {0} tracks.".format(tracks["total"]))
+    track_urls = []
+    while True:
+        for item in tracks["items"]:
+            if "track" in item:
+                track = item["track"]
+            else:
+                track = item
+            try:
+                track_url = track["external_urls"]["spotify"]
+                log.debug(track_url)
+                # file_out.write(track_url + "\n")
+                track_urls.append(track_url)
+            except KeyError:
+                log.warning(
+                    u"Skipping track {0} by {1} (local only?)".format(
+                        track["name"], track["artists"][0]["name"]
+                    )
+                )
+        # 1 page = 50 results
+        # check if there are more pages
+        if tracks["next"]:
+            tracks = spotify.next(tracks)
+        else:
+            break
     return track_urls
